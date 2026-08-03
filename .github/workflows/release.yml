@@ -1,0 +1,94 @@
+name: Release JARs
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Run test suites
+        run: |
+          chmod +x test/run-tests.sh
+          ./test/run-tests.sh
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pack: [universal, acis, mobius, unity, frozen, reunion, l2jserver]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build
+        run: |
+          chmod +x build.sh
+          ./build.sh ${{ matrix.pack }}
+
+      - name: Upload artifact for release job
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-${{ matrix.pack }}
+          path: dist/l2topzone-vote-reward-${{ matrix.pack }}.jar
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all built JARs
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: jar-*
+          merge-multiple: true
+
+      - name: Show downloaded
+        run: ls -la artifacts/
+
+      - name: Copy properties template
+        run: cp common/L2TopzoneVoteReward.properties artifacts/L2TopzoneVoteReward.properties.template
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/l2topzone-vote-reward-*.jar
+            artifacts/L2TopzoneVoteReward.properties.template
+          generate_release_notes: true
+          body: |
+            # L2Topzone Vote Reward — Pre-Compiled JARs
+
+            Drop the JAR for your pack into your gameserver's `libs/` (or equivalent classpath) folder,
+            copy `L2TopzoneVoteReward.properties.template` to `config/L2TopzoneVoteReward.properties`,
+            edit the values, and add **one line** to your `GameServer.java`:
+
+            ```java
+            l2topzone.<pack>.VoteRewardManager.getInstance();
+            ```
+
+            Replace `<pack>` with one of: `acis`, `mobius`, `unity`, `frozen`, `reunion`, `l2jserver`.
+            Not on that list? Use `universal` — it detects your fork at runtime.
+
+            See [docs/INSTALL.md](https://github.com/l2topzone/vote-reward-l2topzone.com/blob/main/docs/INSTALL.md) for full instructions.

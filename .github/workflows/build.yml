@@ -1,0 +1,67 @@
+name: Build vote-reward JARs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'common/**'
+      - 'packs/**'
+      - 'build/stubs/**'
+      - 'test/**'
+      - 'build.sh'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Run test suites
+        run: |
+          chmod +x test/run-tests.sh
+          ./test/run-tests.sh
+
+  build:
+    needs: test
+    name: ${{ matrix.pack }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pack: [universal, acis, mobius, unity, frozen, reunion, l2jserver]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Always build with JDK 17; build.sh cross-compiles via `javac --release N`.
+      # (JDK 8's javac does not support --release, so we can't run the build there.)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build
+        run: |
+          chmod +x build.sh
+          ./build.sh ${{ matrix.pack }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: l2topzone-vote-reward-${{ matrix.pack }}
+          path: |
+            dist/l2topzone-vote-reward-${{ matrix.pack }}.jar
+            dist/L2TopzoneVoteReward.properties.template
+          if-no-files-found: error
+          retention-days: 30
