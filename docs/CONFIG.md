@@ -11,7 +11,7 @@ counts) disables the manager with an explicit `SEVERE` line rather than failing 
 
 | Key | Description |
 |-----|-------------|
-| `ApiKey` | Your unique server API key, from the L2Topzone admin panel. Never appears in logs — only the last 4 characters are printed. |
+| `ApiKey` | Your unique server API key, from the **API documentation** page of your server's dashboard (`https://l2topzone.com/server/<your-server-id>/api-documentation`). Never appears in logs — only the last 4 characters are printed. |
 
 ## API & runtime
 

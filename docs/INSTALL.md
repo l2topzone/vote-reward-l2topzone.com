@@ -48,7 +48,7 @@ mv L2TopzoneVoteReward.properties.template gameserver/config/L2TopzoneVoteReward
 ```
 
 Edit it and set at minimum:
-- `ApiKey` — from your L2Topzone admin panel
+- `ApiKey` — from the **API documentation** page of your server's dashboard
 - `IndividualRewardItemIds` / `IndividualRewardItemCount`
 - `GlobalRewardItemIds` / `GlobalRewardItemCount`
 
@@ -93,8 +93,10 @@ Use this if you want to customize the reward logic, add packs not in the matrix,
 
 
 
-1. **Get your API key** from your L2Topzone admin panel: Dashboard → Server → API Key.
-2. **Whitelist your gameserver IP** in the same panel (otherwise the API returns `403 Forbidden`).
+1. **Get your API key** from your server's dashboard: click the **API documentation** button, at
+   `https://l2topzone.com/server/<your-server-id>/api-documentation`. The key and the endpoint
+   reference for your server are both on that page.
+2. **Whitelist your gameserver IP** in your server's dashboard (otherwise the API returns `403 Forbidden`).
 3. **Clone the repo:**
    ```bash
    git clone https://github.com/l2topzone/vote-reward-l2topzone.com.git
@@ -314,7 +316,7 @@ If something does not work, in order:
 
 1. `[L2Topzone]` line appears in server boot log? → If no, the hook was not called.
 2. `ApiKey` is set in `.properties`?
-3. Gameserver IP is whitelisted in the L2Topzone panel?
+3. Gameserver IP is whitelisted in your server's dashboard?
 4. `curl https://api.l2topzone.com/v1/server_<KEY>/getServerData` returns JSON with `totalVotes`?
 5. The vote you made on the site shows up in your panel's vote log?
 6. Your in-game character's client IP equals the IP you voted from? (NAT, VPN and proxies break this.)

@@ -25,7 +25,7 @@ That's it. The manager registers its own voiced command handler and schedules th
 Edit `config/L2TopzoneVoteReward.properties`:
 
 ```properties
-ApiKey                = abc123...        # from https://l2topzone.com/billing
+ApiKey                = abc123...        # dashboard -> API documentation
 IndividualRewardItemIds   = 57           # adena
 IndividualRewardItemCount = 1000000
 

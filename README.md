@@ -72,8 +72,10 @@ No source merge, no patches, works on any revision of the supported packs (the J
 
 ### Option B — Build from source
 
-1. Get your **API key** from your server's dashboard at <https://l2topzone.com/billing> → Server settings → API.
-2. Whitelist your gameserver public IP in the same panel.
+1. Get your **API key** from your server's dashboard: open the **API documentation** button
+   (`https://l2topzone.com/server/<your-server-id>/api-documentation`). That page holds the key
+   and the endpoint reference for your server.
+2. Whitelist your gameserver public IP in your server's dashboard.
 3. Copy `common/*.java` + `packs/<your-pack>/VoteRewardManager.java` into your server source tree (paths documented in each pack's README).
 4. Edit `config/L2TopzoneVoteReward.properties` with your API key, reward items and limits.
 5. Recompile the gameserver. Reward Manager auto-loads at boot.
