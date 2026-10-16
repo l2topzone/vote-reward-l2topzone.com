@@ -29,6 +29,7 @@ public class CoreSelfTest
         storeTests();
         addItemOverloadTests();
         ipNormalizationTests();
+        playerCodeTests();
         endToEndTests();
 
         System.out.println("\n==================================");
@@ -65,6 +66,15 @@ public class CoreSelfTest
         eq(7L, L2TopzoneJson.of("{\"rank\":7,\"data\":{\"rank\":99}}").number("rank", -1), "outer key wins over nested");
         eq(true, L2TopzoneJson.of("{\"data\":{\"x\":1},\"ok\":true}").bool("ok", false), "key after a nested object");
         eq(true, L2TopzoneJson.of("{\"list\":[1,2,{\"ok\":false}],\"ok\":true}").bool("ok", false), "key after an array");
+
+        // The real API envelope: {"ok":true,"result":{...}}.
+        L2TopzoneJson env = L2TopzoneJson.of("{\"ok\":true,\"error_code\":0,\"description\":\"\",\"result\":{\"isVoted\":true,\"voteTime\":\"1760550000\",\"serverTime\":1760551000,\"trusted\":true}}");
+        eq(true, env.payload().bool("isVoted", false), "isVoted read from the result envelope");
+        eq(1760550000L, env.payload().number("voteTime", 0), "voteTime read from the result envelope");
+        eq(true, env.bool("ok", false), "ok still read at the top level");
+        eq(1547L, L2TopzoneJson.of("{\"ok\":true,\"result\":{\"totalVotes\":1547,\"serverRank\":3}}").payload().number("totalVotes", 0), "getServerData envelope");
+        eq(true, L2TopzoneJson.of("{\"ok\":true,\"isVoted\":true}").payload().bool("isVoted", false), "flat answers still work");
+        eq(null, L2TopzoneJson.of("{\"ok\":true,\"result\":\"\"}").object("result"), "a non-object result is not an envelope");
 
         eq(null, L2TopzoneJson.of("{\"ok\":true}").boolOrNull("missing"), "boolOrNull distinguishes absent");
         eq(Boolean.FALSE, L2TopzoneJson.of("{\"ok\":false}").boolOrNull("ok"), "boolOrNull reads false");
@@ -531,6 +541,101 @@ public class CoreSelfTest
         mgr.shutdown();
         server.stop(0);
         new Thread(() -> { try { Thread.sleep(1500); } catch (Exception e) {} System.exit(failed > 0 ? 1 : 0); }).start();
+    }
+
+    /**
+     * Player codes: no vote for the IP -> ask by the character's code (POST body),
+     * reward, and confirm by code. Off -> the code is never sent.
+     */
+    static void playerCodeTests() throws Exception
+    {
+        section("Player code fallback");
+
+        final java.util.List<String> bodies = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        final java.util.List<String> urls = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", ex -> {
+            String path = ex.getRequestURI().toString();
+            String req = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            urls.add(ex.getRequestMethod() + " " + path);
+            bodies.add(path.replaceAll(".*/", "") + " " + req);
+            boolean byCode = req.contains("player_code");
+            String body;
+            if (path.endsWith("getServerData"))
+                body = "{\"ok\":true,\"totalVotes\":1,\"serverRank\":1}";
+            else if (path.endsWith("getUserData"))
+                body = "{\"ok\":true,\"result\":{\"isVoted\":" + byCode + ",\"voteTime\":null,\"serverTime\":" + (System.currentTimeMillis() / 1000L) + "}}";
+            else
+                body = "{\"ok\":true}";
+            byte[] out = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, out.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(out); }
+        });
+        server.start();
+        String host = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+
+        File dir = Files.createTempDirectory("l2tz-code").toFile();
+        String base = "ApiKey=TESTKEY123\nApiHost=" + host + "\nIndividualRewardItemIds=57\nIndividualRewardItemCount=10\n"
+            + "GlobalEnabled=false\nHwidProtection=false\nDebugLog=false\n";
+
+        // --- ON ---
+        File on = new File(dir, "on.properties");
+        Files.write(on.toPath(), (base + "PlayerCodeEnabled=true\nVoteUrl=https://l2topzone.com/vote/id/18589\n").getBytes(StandardCharsets.UTF_8));
+        TestManager mgr = new TestManager();
+        mgr.init(on.getPath(), new File(dir, "on.store").getPath());
+
+        String code = L2TopzonePlayerCode.of("TESTKEY123", 901);
+        eq(true, code.matches("[A-Z2-9]{24}"), "code is 24 chars (L2Topzone standard) from the safe alphabet: " + code);
+        eq(code, L2TopzonePlayerCode.of("TESTKEY123", 901), "code is stable for a character");
+        eq(false, code.equals(L2TopzonePlayerCode.of("TESTKEY123", 902)), "codes differ between characters");
+        eq(false, code.equals(L2TopzonePlayerCode.of("OTHERKEY", 901)), "codes depend on the API key");
+
+        TestPlayer p = new TestPlayer(901, "10.0.0.1");
+        mgr.handle("vote", "link", p);
+        eq(true, p.lastMessage().contains("https://l2topzone.com/vote/id/18589?player_code=" + code), ".vote link shows the personal link: " + p.lastMessage());
+
+        bodies.clear();
+        urls.clear();
+        mgr.handle("vote", null, p);
+        await(() -> p.adenaReceived.get() > 0, 5000);
+        eq(10L, p.adenaReceived.get(), "rewarded through the player code when the IP has no vote");
+        Thread.sleep(300);
+        eq(1L, bodies.stream().filter(b -> b.startsWith("getUserData")).count(), "one check, not two");
+        eq(true, bodies.stream().anyMatch(b -> b.startsWith("getUserData") && b.contains("\"ip\":\"10.0.0.1\"") && b.contains("\"player_code\":\"" + code + "\"")), "IP and code together in the POST body");
+        eq(true, bodies.stream().anyMatch(b -> b.startsWith("confirmVote") && b.contains("\"ip\":\"10.0.0.1\"") && b.contains("\"player_code\":\"" + code + "\"")), "confirmed with IP and code");
+        eq(false, urls.stream().anyMatch(u -> u.contains(code)), "the code never appears in a URL");
+        eq(true, urls.stream().allMatch(u -> u.startsWith("POST ") || u.contains("getServerData")), "vote checks are POST only");
+        mgr.shutdown();
+
+        // --- OFF (default) ---
+        File off = new File(dir, "off.properties");
+        Files.write(off.toPath(), base.getBytes(StandardCharsets.UTF_8));
+        TestManager mgr2 = new TestManager();
+        mgr2.init(off.getPath(), new File(dir, "off.store").getPath());
+        bodies.clear();
+        TestPlayer q = new TestPlayer(903, "10.0.0.3");
+        mgr2.handle("vote", null, q);
+        await(() -> !q.messages.isEmpty() && !q.lastMessage().contains("Checking"), 5000);
+        eq(0L, q.adenaReceived.get(), "off: no reward when the IP has no vote");
+        eq(false, bodies.stream().anyMatch(b -> b.contains("player_code")), "off: the code is never sent");
+        eq(true, q.lastMessage().contains("No vote found"), "off: classic message: " + q.lastMessage());
+        mgr2.shutdown();
+
+        // --- ON without a valid VoteUrl -> disabled, logged ---
+        File bad = new File(dir, "bad.properties");
+        Files.write(bad.toPath(), (base + "PlayerCodeEnabled=true\nVoteUrl=l2topzone.com\n").getBytes(StandardCharsets.UTF_8));
+        L2TopzoneConfig bc = L2TopzoneConfig.load(bad.getPath());
+        eq(false, bc.playerCodeEnabled, "an invalid VoteUrl switches player codes off");
+
+        // HTTPS only (http:// allowed for a local test server).
+        File plain = new File(dir, "plain.properties");
+        Files.write(plain.toPath(), "ApiKey=K\nApiHost=http://api.l2topzone.com/v1\nGlobalEnabled=false\n".getBytes(StandardCharsets.UTF_8));
+        eq(null, L2TopzoneConfig.load(plain.getPath()), "plain http:// ApiHost is refused");
+        File secure = new File(dir, "secure.properties");
+        Files.write(secure.toPath(), "ApiKey=K\nApiHost=https://api.l2topzone.com/v1\nGlobalEnabled=false\n".getBytes(StandardCharsets.UTF_8));
+        eq(true, L2TopzoneConfig.load(secure.getPath()) != null, "https:// ApiHost accepted");
+
+        server.stop(0);
     }
 
     public static class OfflineTrader extends TestPlayer

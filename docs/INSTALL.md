@@ -131,6 +131,7 @@ Final structure inside your gameserver source root:
     ├── L2TopzoneAPI.java                 ← from common/
     ├── L2TopzoneConfig.java              ← from common/
     ├── L2TopzoneJson.java                ← from common/
+    ├── L2TopzonePlayerCode.java          ← from common/
     ├── L2TopzonePlayers.java             ← from common/
     ├── L2TopzoneRewardBase.java          ← from common/
     ├── L2TopzoneStore.java               ← from common/

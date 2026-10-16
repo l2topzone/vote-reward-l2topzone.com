@@ -13,6 +13,7 @@ Open-source Java vote-reward scripts for the most popular Lineage II Java server
 - Fully **admin-configurable** rewards: any item ID + count combination, plus command aliases
 - **Localizable** — every player-facing message is overridable in the properties file (UTF-8)
 - In-game `.vote reload` / `.vote status` for GMs, no restart needed to change rewards
+- Optional **player codes** — a personal vote link per character (`.vote link`), so players whose browser and game use different IPs still get their reward
 - Single shared HTTP/JSON helper (no external dependencies)
 - Pack-specific Java target version (8, 11 or 17) matching upstream
 
@@ -90,20 +91,44 @@ Base URL: `https://api.l2topzone.com/v1`
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /server_{API_KEY}/getServerData` | Total votes + global rank for the server |
-| `POST /server_{API_KEY}/getUserData` body `{ip}` | Has the player's IP voted in last 12h |
-| `POST /server_{API_KEY}/confirmVote` body `{ip}` | Mark vote as rewarded (idempotent) |
+| `POST /server_{API_KEY}/getUserData` body `{ip}` or `{player_code}` | Has the player voted in the last 12h |
+| `POST /server_{API_KEY}/confirmVote` body `{ip}` or `{player_code}` | Mark vote as rewarded (idempotent) |
+
+Answers come wrapped as `{"ok":true,"result":{...}}`. `player_code` is accepted only in a
+POST body (never in a URL) and only for servers L2Topzone switched player codes on for.
 
 All endpoints respect:
 - **IP whitelist** — only your registered gameserver IP may call them.
 - **Rate limit** — `throttle:vote-api` (60 req/min by default). `MaxConcurrentRequests` caps how fast the manager can hit it.
 
-Sandbox mode (no auth, mock data) at `/v1/sandbox/...` for dev/testing.
+Sandbox (no auth, mock data): keep the normal host and set `ApiKey = sandbox_key` —
+IP `10.0.0.1` has voted, `10.0.0.2` has not.
+
+Full documentation, in every language of the site: your server's dashboard → **API documentation**.
 
 A non-2xx response is always treated as a refusal, even if the body says `ok:true` — a
 401/403 means the key or the IP whitelist is wrong, and rewards must not be granted off
 the back of a rejected request. The in-game message distinguishes *"service unreachable"*
 (transient) from *"service refused"* (an admin has to act), and the boot log states which
 one it is with the API key masked.
+
+## Player codes
+
+Some carriers give a player one IP in the browser and another in the game, so the IP
+check never finds their vote. With `PlayerCodeEnabled = true` and `VoteUrl` set:
+
+1. the player types `.vote link` and gets a personal link, e.g.
+   `https://l2topzone.com/vote/id/12345?player_code=9MWJTEJPEC4RX7KQ2ZD8HV5N`;
+2. votes through it;
+3. `.vote` sends the IP and the code in the same POST body; L2Topzone checks the IP first
+   and the code only when the IP has no vote. `confirmVote` sends both the same way.
+
+The code follows the L2Topzone standard — exactly 24 letters and digits — and is derived from
+your API key and the character id (HMAC-SHA256):
+stable, nothing to store, impossible to guess without your key. L2Topzone links a code to
+the first account that votes with it, so one code cannot collect several accounts' votes.
+L2Topzone switches player codes on per server. While they are off for yours, the code is
+simply ignored and the classic IP check keeps working — turning the option on never breaks rewards.
 
 ## In-game admin commands
 

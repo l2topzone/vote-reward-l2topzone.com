@@ -61,6 +61,14 @@ public final class L2TopzoneConfig
 
     public boolean debugLog;
 
+    /**
+     * Player codes: reward check by a per-character code from the vote link
+     * when the IP does not match. Works only after L2Topzone enabled it for
+     * your server. {@link #voteUrl} is the server's vote page.
+     */
+    public boolean playerCodeEnabled;
+    public String voteUrl;
+
     private final Map<String, String> messages = new HashMap<>();
 
     /** @return the first configured command name — used for log lines and help text. */
@@ -155,6 +163,9 @@ public final class L2TopzoneConfig
 
         c.debugLog = parseBool(p, "DebugLog", false);
 
+        c.playerCodeEnabled = parseBool(p, "PlayerCodeEnabled", false);
+        c.voteUrl = p.getProperty("VoteUrl", "").trim();
+
         c.loadMessages(p);
 
         if (!c.validate(propertiesPath))
@@ -165,7 +176,8 @@ public final class L2TopzoneConfig
         LOG.info("[L2Topzone] Config loaded. Command(s): ." + String.join(", .", c.voiceCommands)
             + ", cooldown: " + c.cooldownHours + "h"
             + ", HWID protection: " + (c.hwidProtection ? c.maxAccountsPerHwid + " char(s)/" + c.hwidWindowHours + "h" : "off")
-            + ", global: " + (c.globalEnabled ? "every " + c.globalVoteInterval + " votes" : "off"));
+            + ", global: " + (c.globalEnabled ? "every " + c.globalVoteInterval + " votes" : "off")
+            + ", player codes: " + (c.playerCodeEnabled ? "on" : "off"));
         return c;
     }
 
@@ -178,9 +190,13 @@ public final class L2TopzoneConfig
             LOG.severe("[L2Topzone] ApiKey is empty in " + path + " — vote rewards disabled.");
             return false;
         }
-        if (!apiHost.startsWith("http://") && !apiHost.startsWith("https://"))
+        // HTTPS only: the API key, player IPs and player codes must never travel in
+        // clear text (the API refuses plain HTTP). http:// is allowed for a local
+        // test server only.
+        boolean localHttp = apiHost.matches("^http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?(/.*)?$");
+        if (!apiHost.startsWith("https://") && !localHttp)
         {
-            LOG.severe("[L2Topzone] ApiHost must start with http:// or https:// (got '" + apiHost + "').");
+            LOG.severe("[L2Topzone] ApiHost must start with https:// (got '" + apiHost + "') — vote rewards disabled.");
             return false;
         }
         if (voiceCommands.length == 0)
@@ -195,6 +211,12 @@ public final class L2TopzoneConfig
         if (globalEnabled && !checkRewardList("Global", globalItemIds, globalItemCounts, true))
         {
             return false;
+        }
+        if (playerCodeEnabled && !voteUrl.matches("^https?://\\S+/vote/id/\\d+.*$"))
+        {
+            LOG.severe("[L2Topzone] PlayerCodeEnabled=true needs VoteUrl = your vote page, e.g. "
+                + "https://l2topzone.com/vote/id/12345 (got '" + voteUrl + "') — player codes disabled.");
+            playerCodeEnabled = false;
         }
         return true;
     }
@@ -251,6 +273,8 @@ public final class L2TopzoneConfig
         put(p, "GlobalReward", "The server reached {votes} total votes! Global reward delivered.");
         put(p, "Reloaded", "Vote reward configuration reloaded.");
         put(p, "ReloadFailed", "Reload failed — the config file is invalid. Previous settings kept.");
+        put(p, "VoteLink", "Your personal vote link: {link}");
+        put(p, "NoVoteLink", "No vote found. Vote with your personal link and try again: {link}");
     }
 
     /**

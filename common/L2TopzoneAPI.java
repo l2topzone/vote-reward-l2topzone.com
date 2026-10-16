@@ -18,6 +18,11 @@ import java.util.logging.Logger;
  *   POST https://api.l2topzone.com/v1/server_{KEY}/getUserData   body: {"ip":"x.x.x.x"}
  *   POST https://api.l2topzone.com/v1/server_{KEY}/confirmVote   body: {"ip":"x.x.x.x"}
  *
+ * Player codes: the same two POST calls with body {"ip":"...","player_code":"..."}.
+ * The API checks the IP first and the code only when the IP has no vote; while
+ * player codes are off for the server the code is simply ignored, so the call
+ * always works. A code is only ever sent in a POST body, never in a URL.
+ *
  * <p>Every call returns a {@link Status} so callers can distinguish "the network
  * is down" (retry later, don't alarm the player) from "the API rejected us"
  * (bad key / IP not whitelisted — an admin must act). The old client collapsed
@@ -108,8 +113,10 @@ public final class L2TopzoneAPI
         {
             return out;
         }
-        out.totalVotes = (int) Math.max(0L, json.number("totalVotes", 0L));
-        out.serverRank = (int) Math.max(0L, json.number("serverRank", 0L));
+        // The API answers {"ok":true,"result":{...}}; flat answers are read as-is.
+        L2TopzoneJson data = json.payload();
+        out.totalVotes = (int) Math.max(0L, data.number("totalVotes", 0L));
+        out.serverRank = (int) Math.max(0L, data.number("serverRank", 0L));
         return out;
     }
 
@@ -118,16 +125,27 @@ public final class L2TopzoneAPI
      */
     public VoteStatus getUserData(String voterIp)
     {
+        return getUserData(voterIp, null);
+    }
+
+    /**
+     * Whether the player has a valid vote: by {@code voterIp}, and — when
+     * {@code playerCode} is not null — by the character's player code if the IP
+     * has none (same request).
+     */
+    public VoteStatus getUserData(String voterIp, String playerCode)
+    {
         VoteStatus out = new VoteStatus();
-        Http r = request("POST", apiHost + "/server_" + apiKey + "/getUserData", ipBody(voterIp));
+        Http r = request("POST", apiHost + "/server_" + apiKey + "/getUserData", body(voterIp, playerCode));
         L2TopzoneJson json = applyStatus(r, out);
         if (json == null)
         {
             return out;
         }
-        out.isVoted = json.bool("isVoted", false);
-        out.voteTime = json.number("voteTime", 0L);
-        out.serverTime = json.number("serverTime", System.currentTimeMillis() / 1000L);
+        L2TopzoneJson data = json.payload();
+        out.isVoted = data.bool("isVoted", false);
+        out.voteTime = data.number("voteTime", 0L);
+        out.serverTime = data.number("serverTime", System.currentTimeMillis() / 1000L);
         return out;
     }
 
@@ -137,7 +155,13 @@ public final class L2TopzoneAPI
      */
     public boolean confirmVote(String voterIp)
     {
-        Http r = request("POST", apiHost + "/server_" + apiKey + "/confirmVote", ipBody(voterIp));
+        return confirmVote(voterIp, null);
+    }
+
+    /** {@link #confirmVote(String)} with the player code alongside the IP. */
+    public boolean confirmVote(String voterIp, String playerCode)
+    {
+        Http r = request("POST", apiHost + "/server_" + apiKey + "/confirmVote", body(voterIp, playerCode));
         if (r.transportError)
         {
             return false;
@@ -176,7 +200,7 @@ public final class L2TopzoneAPI
         boolean success = httpOk && !Boolean.FALSE.equals(ok);
         if (!success)
         {
-            String msg = json == null ? null : json.text("message", json.text("error", null));
+            String msg = json == null ? null : json.text("description", json.text("message", json.text("error", null)));
             setStatus(target, Status.API_ERROR, "HTTP " + r.code + (msg == null ? "" : " — " + msg));
             return null;
         }
@@ -305,9 +329,14 @@ public final class L2TopzoneAPI
     // Helpers
     // ============================================================
 
-    private static String ipBody(String ip)
+    private static String body(String ip, String playerCode)
     {
-        return "{\"ip\":\"" + escape(ip == null ? "" : ip) + "\"}";
+        String b = "{\"ip\":\"" + escape(ip == null ? "" : ip) + "\"";
+        if (playerCode != null && !playerCode.isEmpty())
+        {
+            b += ",\"player_code\":\"" + escape(playerCode) + "\"";
+        }
+        return b + "}";
     }
 
     private static String escape(String s)

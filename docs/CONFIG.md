@@ -17,7 +17,7 @@ counts) disables the manager with an explicit `SEVERE` line rather than failing 
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `ApiHost` | `https://api.l2topzone.com/v1` | Override only for sandbox testing. Must start with `http://` or `https://`. |
+| `ApiHost` | `https://api.l2topzone.com/v1` | Leave as is. Must start with `https://` — the API refuses plain HTTP (`http://` is accepted only for `localhost` / `127.0.0.1` test servers). |
 | `VoiceCommand` | `vote` | Trigger word without the dot. Comma-separate for aliases: `vote, votar, rasplata`. A leading dot is tolerated and stripped. |
 | `CooldownHours` | `12` | Per-character cooldown matching the API window. 1–720. |
 | `MinPlayerLevel` | `1` | Minimum level allowed to claim. Raise to blunt bot/alt farming. |
@@ -80,6 +80,13 @@ per-IP window still apply.
 | `StoreFile` | *(pack default)* | Where cooldown/HWID state is persisted. Give each world its own file when several gameservers share a directory. |
 | `PackBasePackage` | *(empty)* | **Universal build only.** Your pack's root package, i.e. the part before `.gameserver` (`com.l2jorion`). Normally auto-detected — set it only if the boot log says the registry was not found. |
 
+## Player codes
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `PlayerCodeEnabled` | `false` | Personal vote link per character (`.vote link`); the reward check sends the IP and the character's code together, and L2Topzone uses the code only when the IP has no vote. Ignored (classic IP check) while L2Topzone has player codes off for your server. |
+| `VoteUrl` | — | Your vote page, e.g. `https://l2topzone.com/vote/id/12345`. Required when `PlayerCodeEnabled = true`; an invalid value switches player codes off (logged at boot). |
+
 ## Messages
 
 Every player-facing string is overridable. Delete a line to keep the English default; set
@@ -103,6 +110,8 @@ it **empty** to silence that message entirely.
 | `MsgLowLevel` | `{level}` |
 | `MsgGlobalReward` | `{votes}` |
 | `MsgReloaded`, `MsgReloadFailed` | — |
+| `MsgVoteLink` | `{link}` — player codes only |
+| `MsgNoVoteLink` | `{link}` — replaces `MsgNoVote` when player codes are on |
 
 `{time}` renders as `HH:MM:SS`.
 

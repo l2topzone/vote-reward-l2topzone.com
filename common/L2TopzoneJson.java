@@ -101,6 +101,48 @@ final class L2TopzoneJson
         }
     }
 
+    /**
+     * The object value of the first top-level key {@code key} as its own document,
+     * or null. The vote API wraps its payload as {@code {"ok":true,"result":{...}}}.
+     */
+    L2TopzoneJson object(String key)
+    {
+        final int n = src.length();
+        int i = 0;
+        while (i < n)
+        {
+            char c = src.charAt(i);
+            if (c != '"')
+            {
+                i++;
+                continue;
+            }
+            int[] end = new int[1];
+            String token = readString(i, end);
+            i = end[0];
+            int j = skipWs(i);
+            if (j < n && src.charAt(j) == ':')
+            {
+                int valueStart = skipWs(j + 1);
+                int valueEnd = skipValue(valueStart);
+                if (key.equals(token))
+                {
+                    return valueStart < n && src.charAt(valueStart) == '{'
+                        ? new L2TopzoneJson(src.substring(valueStart, Math.min(valueEnd, n))) : null;
+                }
+                i = valueEnd;
+            }
+        }
+        return null;
+    }
+
+    /** The {@code result} envelope when present, else this document (flat responses). */
+    L2TopzoneJson payload()
+    {
+        L2TopzoneJson r = object("result");
+        return r != null ? r : this;
+    }
+
     // ---- scanner -------------------------------------------------------------
 
     /** Raw (unquoted, unescaped) value of the first object key equal to {@code key}. */

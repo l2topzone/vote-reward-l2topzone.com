@@ -231,6 +231,12 @@ public abstract class L2TopzoneRewardBase
         }
 
         String sub = params == null ? "" : params.trim();
+        // .vote link — the character's personal vote link (player codes on).
+        if ("link".equalsIgnoreCase(sub) && c.playerCodeEnabled)
+        {
+            tell(player, c.msg("VoteLink", "link", personalLink(c, charId)));
+            return true;
+        }
         if (!sub.isEmpty() && L2TopzonePlayers.isGm(player))
         {
             return adminCommand(sub, player);
@@ -298,10 +304,20 @@ public abstract class L2TopzoneRewardBase
         return true;
     }
 
+    private static String personalLink(L2TopzoneConfig c, int charId)
+    {
+        return L2TopzonePlayerCode.link(c.voteUrl, L2TopzonePlayerCode.of(c.apiKey, charId));
+    }
+
     /** Runs on the IO pool — blocking calls are expected here. */
     private void processVote(L2TopzoneConfig c, Object player, int charId, String ip, String hwid)
     {
-        L2TopzoneAPI.VoteStatus s = api.getUserData(ip);
+        // With player codes on, the character's code rides along with the IP in
+        // the same POST body: the API tries the IP first, then the code (browser
+        // and game on different IPs). If L2Topzone has codes off for the server,
+        // the code is ignored and this is the classic IP check.
+        final String code = c.playerCodeEnabled ? L2TopzonePlayerCode.of(c.apiKey, charId) : null;
+        L2TopzoneAPI.VoteStatus s = api.getUserData(ip, code);
 
         if (s.status == L2TopzoneAPI.Status.TRANSPORT_ERROR)
         {
@@ -327,7 +343,7 @@ public abstract class L2TopzoneRewardBase
             long remaining = secondsUntilNextVote(s, c);
             tell(player, remaining > 0
                 ? c.msg("AlreadyRewarded", "time", formatHms(remaining))
-                : c.msg("NoVote"));
+                : (c.playerCodeEnabled ? c.msg("NoVoteLink", "link", personalLink(c, charId)) : c.msg("NoVote")));
             return;
         }
 
@@ -366,18 +382,19 @@ public abstract class L2TopzoneRewardBase
             store.recordHwid(hwid, charId);
         }
 
-        if (!api.confirmVote(ip))
+        if (!api.confirmVote(ip, code))
         {
             // The reward is already delivered; the local cooldown prevents a repeat
             // here, but the vote stays claimable via another server-side path.
             LOG.warning("[L2Topzone] Reward delivered to " + L2TopzonePlayers.name(player)
-                + " but confirmVote(" + ip + ") failed — the API may still list the vote as unrewarded.");
+                + " but confirmVote(" + ip + (code != null ? " + player code" : "") + ") failed — the API may still list the vote as unrewarded.");
         }
 
         tell(player, c.msg("Rewarded"));
         if (c.debugLog)
         {
-            LOG.info("[L2Topzone] Rewarded " + L2TopzonePlayers.name(player) + " (charId=" + charId + ", ip=" + ip + ")");
+            LOG.info("[L2Topzone] Rewarded " + L2TopzonePlayers.name(player) + " (charId=" + charId + ", ip=" + ip
+                + (code != null ? ", player code on" : "") + ")");
         }
     }
 
