@@ -16,9 +16,11 @@ import java.util.logging.Logger;
  * Endpoints:
  *   GET  https://api.l2topzone.com/v1/server_{KEY}/getServerData
  *   POST https://api.l2topzone.com/v1/server_{KEY}/getUserData   body: {"ip":"x.x.x.x"}
- *   POST https://api.l2topzone.com/v1/server_{KEY}/confirmVote   body: {"ip":"x.x.x.x"}
  *
- * Player codes: the same two POST calls with body {"ip":"...","player_code":"..."}.
+ * getUserData also marks the vote as rewarded when it answers isVoted=true, so
+ * there is no separate confirm call.
+ *
+ * Player codes: the same POST call with body {"ip":"...","player_code":"..."}.
  * The API checks the IP first and the code only when the IP has no vote; while
  * player codes are off for the server the code is simply ignored, so the call
  * always works. A code is only ever sent in a POST body, never in a URL.
@@ -147,28 +149,6 @@ public final class L2TopzoneAPI
         out.voteTime = data.number("voteTime", 0L);
         out.serverTime = data.number("serverTime", System.currentTimeMillis() / 1000L);
         return out;
-    }
-
-    /**
-     * Confirms reward delivery so the same vote isn't rewarded twice.
-     * @return true when the API acknowledged the confirmation.
-     */
-    public boolean confirmVote(String voterIp)
-    {
-        return confirmVote(voterIp, null);
-    }
-
-    /** {@link #confirmVote(String)} with the player code alongside the IP. */
-    public boolean confirmVote(String voterIp, String playerCode)
-    {
-        Http r = request("POST", apiHost + "/server_" + apiKey + "/confirmVote", body(voterIp, playerCode));
-        if (r.transportError)
-        {
-            return false;
-        }
-        L2TopzoneJson json = L2TopzoneJson.of(r.body);
-        Boolean ok = json == null ? null : json.boolOrNull("ok");
-        return (r.code >= 200 && r.code < 300) && !Boolean.FALSE.equals(ok);
     }
 
     // ============================================================

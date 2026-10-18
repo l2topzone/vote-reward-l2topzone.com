@@ -602,7 +602,7 @@ public class CoreSelfTest
         Thread.sleep(300);
         eq(1L, bodies.stream().filter(b -> b.startsWith("getUserData")).count(), "one check, not two");
         eq(true, bodies.stream().anyMatch(b -> b.startsWith("getUserData") && b.contains("\"ip\":\"10.0.0.1\"") && b.contains("\"player_code\":\"" + code + "\"")), "IP and code together in the POST body");
-        eq(true, bodies.stream().anyMatch(b -> b.startsWith("confirmVote") && b.contains("\"ip\":\"10.0.0.1\"") && b.contains("\"player_code\":\"" + code + "\"")), "confirmed with IP and code");
+        eq(false, bodies.stream().anyMatch(b -> b.startsWith("confirmVote")), "no confirmVote call: getUserData already marks the vote as rewarded");
         eq(false, urls.stream().anyMatch(u -> u.contains(code)), "the code never appears in a URL");
         eq(true, urls.stream().allMatch(u -> u.startsWith("POST ") || u.contains("getServerData")), "vote checks are POST only");
         mgr.shutdown();

@@ -92,7 +92,6 @@ Base URL: `https://api.l2topzone.com/v1`
 |----------|---------|
 | `GET /server_{API_KEY}/getServerData` | Total votes + global rank for the server |
 | `POST /server_{API_KEY}/getUserData` body `{ip}` or `{player_code}` | Has the player voted in the last 12h |
-| `POST /server_{API_KEY}/confirmVote` body `{ip}` or `{player_code}` | Mark vote as rewarded (idempotent) |
 
 Answers come wrapped as `{"ok":true,"result":{...}}`. `player_code` is accepted only in a
 POST body (never in a URL) and only for servers L2Topzone switched player codes on for.
@@ -121,7 +120,7 @@ check never finds their vote. With `PlayerCodeEnabled = true` and `VoteUrl` set:
    `https://l2topzone.com/vote/id/12345?player_code=9MWJTEJPEC4RX7KQ2ZD8HV5N`;
 2. votes through it;
 3. `.vote` sends the IP and the code in the same POST body; L2Topzone checks the IP first
-   and the code only when the IP has no vote. `confirmVote` sends both the same way.
+   and the code only when the IP has no vote. A vote it reports is marked as rewarded at the same time, so there is no separate confirm call.
 
 The code follows the L2Topzone standard — exactly 24 letters and digits — and is derived from
 your API key and the character id (HMAC-SHA256):

@@ -382,13 +382,8 @@ public abstract class L2TopzoneRewardBase
             store.recordHwid(hwid, charId);
         }
 
-        if (!api.confirmVote(ip, code))
-        {
-            // The reward is already delivered; the local cooldown prevents a repeat
-            // here, but the vote stays claimable via another server-side path.
-            LOG.warning("[L2Topzone] Reward delivered to " + L2TopzonePlayers.name(player)
-                + " but confirmVote(" + ip + (code != null ? " + player code" : "") + ") failed — the API may still list the vote as unrewarded.");
-        }
+        // No confirmVote call: getUserData already marked this vote as rewarded
+        // when it answered isVoted=true, so a second request would only add load.
 
         tell(player, c.msg("Rewarded"));
         if (c.debugLog)
